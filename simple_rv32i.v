@@ -95,19 +95,7 @@ always @(*) begin
     endcase
 end
 
-// register file and lw/sw
-always @(posedge clk) begin
-    if (rd != 0 && inst_type == 4'b0010 && funct3 == 3'b010) begin
-        lw_addr = reg_file[rs1] + imm;
-        reg_file[rd] <= data_mem[lw_addr >> 2];
-    end else if (inst_type == 4'b0011 && funct3 == 3'b010) begin
-        sw_addr = reg_file[rs1] + imm;
-        data_mem[sw_addr >> 2] <= reg_file[rs2];
-    end else if (inst_type == 4'b0000 || inst_type == 4'b0001 
-                || inst_type == 4'b0100 || inst_type == 4'b0101) begin
-        reg_file[rd] <= write_data;
-    end
-end
+
 
 // ALU
 reg [31:0] alu_oper1, alu_oper2;
@@ -170,7 +158,16 @@ always @(posedge clk or posedge reset) begin
     if (reset) begin
         pc <= 0;
     end else begin
-        if (inst_type == 4'b0111) begin // JAL
+        if (rd != 0 && inst_type == 4'b0010 && funct3 == 3'b010) begin
+            lw_addr = reg_file[rs1] + imm;
+            reg_file[rd] <= data_mem[lw_addr >> 2];
+        end else if (inst_type == 4'b0011 && funct3 == 3'b010) begin
+            sw_addr = reg_file[rs1] + imm;
+            data_mem[sw_addr >> 2] <= reg_file[rs2];
+        end else if (inst_type == 4'b0000 || inst_type == 4'b0001 
+                    || inst_type == 4'b0100 || inst_type == 4'b0101) begin
+            reg_file[rd] <= write_data;
+        end else if (inst_type == 4'b0111) begin // JAL
             if (rd != 0) begin
                 reg_file[rd] <= pc + 4;
             end
