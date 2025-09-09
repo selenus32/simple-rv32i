@@ -6,12 +6,16 @@ module simple_rv32i(
     input reset  
 );
 
-reg write_on;
 reg [31:0] write_data;
 
 reg [31:0] pc;
 reg [31:0] inst_mem [0:255];
+reg [31:0] data_mem [0:255];
 wire [31:0] inst;
+
+reg [31:0] lw_addr;
+reg [31:0] sw_addr;
+reg [31:0] reg_file [31:0];
 
 // instruction fetch
 assign inst = inst_mem[pc >> 2];
@@ -24,7 +28,6 @@ reg [4:0] rd, rs1, rs2;
 reg [2:0] funct3;
 reg [6:0] funct7;
 reg [31:0] imm;
-
 reg [3:0] inst_type;
 
 always @(*) begin
@@ -79,9 +82,11 @@ always @(*) begin
             imm = {{12{inst[31]}},inst[19:12],inst[20],inst[30:21],1'b0};
             inst_type = 4'b0111;
         end
-        5'b11001: begin // J-type JALR
+        5'b11001: begin // I-type JALR
             rd = inst[11:7];
-            imm = {{12{inst[31]}},inst[19:12],inst[20],inst[30:21],1'b0};
+            funct3 = inst[14:12];
+            rs1 = inst[19:15];
+            imm = {{21{inst[31]}},inst[30:20]};
             inst_type = 4'b1000;
         end
         default: begin
@@ -90,23 +95,28 @@ always @(*) begin
     endcase
 end
 
-// register file
-reg [31:0] reg_file [31:0];
+// register file and lw/sw
 always @(posedge clk) begin
-    if (write_on && rd != 0)
+    if (rd != 0 && inst_type == 4'b0010 && funct3 == 3'b010) begin
+        lw_addr = reg_file[rs1] + imm;
+        reg_file[rd] <= data_mem[lw_addr >> 2];
+    end else if (inst_type == 4'b0011 && funct3 == 3'b010) begin
+        sw_addr = reg_file[rs1] + imm;
+        data_mem[sw_addr >> 2] <= reg_file[rs2];
+    end else if (inst_type == 4'b0000 || inst_type == 4'b0001 
+                || inst_type == 4'b0100 || inst_type == 4'b0101) begin
         reg_file[rd] <= write_data;
+    end
 end
 
 // ALU
 reg [31:0] alu_oper1, alu_oper2;
 reg [31:0] alu_result;
-
 always @(*) begin
     alu_oper1 = 32'b0;
     alu_oper2 = 32'b0;
     alu_result = 32'b0;
     write_data = 32'b0;
-    write_on = 0;
 
     if (inst_type == 4'b0000 || inst_type == 4'b0001) begin
         alu_oper1 = reg_file[rs1];
@@ -131,21 +141,17 @@ always @(*) begin
         endcase
 
         write_data = alu_result;
-        write_on = 1;
     end
     else if (inst_type == 4'b0100) begin // LUI
         write_data = imm;
-        write_on = 1;
     end
     else if (inst_type == 4'b0101) begin // AUIPC
         write_data = pc + imm;
-        write_on = 1;
     end
 end
 
 // branches
 reg branched;
-
 always @(*) begin
     branched = 1'b0;
 
@@ -159,16 +165,15 @@ always @(*) begin
     end
 end
 
-// load/store
-// not implemented yet, will go here
-
 // single-cycle, no cache
 always @(posedge clk or posedge reset) begin
     if (reset) begin
         pc <= 0;
     end else begin
         if (inst_type == 4'b0111) begin // JAL
-            if (rd != 0) reg_file[rd] <= pc + 4;
+            if (rd != 0) begin
+                reg_file[rd] <= pc + 4;
+            end
             pc <= pc + imm;
         end else if (inst_type == 4'b1000) begin // JALR
             if (rd != 0) begin
