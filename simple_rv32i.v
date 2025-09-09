@@ -10,7 +10,7 @@ reg write_on;
 reg [31:0] write_data;
 
 reg [31:0] pc;
-reg [31:0] inst_mem [0:15];
+reg [31:0] inst_mem [0:255];
 wire [31:0] inst;
 
 // instruction fetch
